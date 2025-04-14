@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <title>R1 Speaker File Upload</title>
+    <meta name='viewport'
+        content='width=device-width,initial-scale=1,user-scalable=0,maximum-scale=1,viewport-fit=cover'>
+    <meta name='format-detection' content='telephone=no'>
+    <meta name='referrer' content='no-referrer'>
+</head>
+
+<body style="background-color:#A9D0F5">
+    <div id="StatusBar" style="display:none"></div>
+    <div style="text-align:center;vertical-align:middle;">
+        <h3 style="color:rgba(238, 0, 0, 1);">R1 Speaker File Upload</h3>
+        <p>This page will redirect you to the R1 speaker's upload page.</p>
+        <p>Please wait...</p>
+        <div id="redirect-buttons" style="display:none;">
+            <p>If you are not redirected automatically, please enter the speaker's IP address:</p>
+            <input type="text" id="speaker-ip" placeholder="192.168.x.x" />
+            <button onclick="redirectToSpeaker()">Go to Upload Page</button>
+            <br><br>
+            <input type="button" onclick='location.href="/"' value='Back to Home'>
+        </div>
+    </div>
+    <script>
+        // Function to get URL parameters
+        function getUrlParameter(name) {
+            name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+            var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+            var results = regex.exec(location.search);
+            return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+        }
+
+        // Function to redirect to the speaker's upload page
+        function redirectToSpeaker() {
+            var ip = document.getElementById('speaker-ip').value;
+            if (ip && ip.trim() !== '') {
+                window.location.href = 'http://' + ip.trim() + '/upload';
+            } else {
+                alert('Please enter a valid IP address');
+            }
+        }
+
+        // Try to get the IP from URL parameters or localStorage
+        var speakerIp = getUrlParameter('ip') || localStorage.getItem('ip');
+
+        // If we have an IP, redirect immediately
+        if (speakerIp && speakerIp.trim() !== '') {
+            // Wait a moment to ensure the page is loaded
+            setTimeout(function() {
+                window.location.href = 'http://' + speakerIp.trim() + '/upload';
+            }, 1000);
+        } else {
+            // Show manual input if no IP is available
+            setTimeout(function() {
+                document.getElementById('redirect-buttons').style.display = 'block';
+            }, 2000);
+        }
+
+        // Status bar handling for mobile app
+        function update_StatusBar() {
+            if (typeof (plus) != 'undefined') {
+                var StatusBar_div = document.getElementById('StatusBar');
+                if (plus.navigator.isImmersedStatusbar()) {
+                    StatusBar_div.style.height = plus.navigator.getStatusbarHeight() + 'px';
+                    StatusBar_div.style.display = 'block';
+                } else {
+                    StatusBar_div.style.display = 'none';
+                    plus.navigator.setStatusBarBackground('#A9D0F5');
+                    plus.navigator.setStatusBarStyle('dark');
+                }
+            }
+        }
+
+        document.addEventListener('plusready', update_StatusBar);
+        if (window.plus) update_StatusBar();
+    </script>
+</body>
+</html>
