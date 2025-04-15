@@ -4547,7 +4547,7 @@ function get_ver() {
 
     // Add update log entries
     if (update_log && update_log.length > 0) {
-        version_info += 'Update Log:\n' + update_log.join('\n');
+        version_info += 'Update Log:\n' + update_log.slice().reverse().join('\n');
     }
 
     return version_info;
