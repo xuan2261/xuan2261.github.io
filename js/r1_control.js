@@ -2308,6 +2308,19 @@ function message(data) {
                       activationBtn.disabled = false;
                   }, 3000);
               }
+        } else if (data.type == 'shell' && type_id == 'screen_shell') { // Handle shell command results from Screen view
+            hide_alert = true;
+            // Process shell command results for Screen view
+            var resultText = document.getElementById('screen_shell_result');
+            if (resultText) {
+                if (data.code == 200) {
+                    resultText.value += data.data + '\n';
+                } else {
+                    resultText.value += 'Error: ' + data.msg + '\n';
+                }
+                // Scroll to bottom of textarea
+                resultText.scrollTop = resultText.scrollHeight;
+            }
         } else if (data.type == 'play') { // Generic play confirmation (might be from index change)
             hide_alert = true;
         } else if (data.type == 'send_message' && type_id == 'dormancy') { // Enter/Exit sleep confirmation
@@ -3530,6 +3543,93 @@ function index(data) {
         div_screen_controls.appendChild(btn_reset_res);
 
         screen_div.appendChild(div_screen_controls);
+
+        // Add Execute Shell functionality to Screen view
+        var shellDiv = document.createElement("div");
+        shellDiv.style = 'margin-top: 15px;';
+
+        // Shell input field
+        var shellInput = document.createElement("input");
+        shellInput.type = 'text';
+        shellInput.id = 'screen_shell_input';
+        shellInput.placeholder = 'Enter shell command...'; // Dịch
+        shellInput.style = 'width: 70%; margin-right: 5px; padding: 5px;';
+        // Add Enter key event handler
+        shellInput.onkeydown = function(event) {
+            if (event.keyCode === 13) { // Enter key
+                event.preventDefault();
+                var input = document.getElementById('screen_shell_input');
+                if (input.value.trim() === '') {
+                    alert('Please enter a shell command!'); // Dịch
+                    return;
+                }
+                // Display command in results
+                var resultText = document.getElementById('screen_shell_result');
+                if (resultText) {
+                    resultText.value += '$ ' + input.value + '\n';
+                    resultText.scrollTop = resultText.scrollHeight;
+                }
+                // Send shell command with type_id for specific handling
+                ws_send(JSON.stringify({ type: 'shell', type_id: 'screen_shell', shell: input.value }));
+                // Clear input after sending
+                input.value = '';
+            }
+        };
+        shellDiv.appendChild(shellInput);
+
+        // Execute Shell button
+        var shellBtn = document.createElement("input");
+        shellBtn.type = 'button';
+        shellBtn.className = 'btn';
+        shellBtn.value = 'Execute Shell'; // Dịch
+        shellBtn.style = 'margin-top: 5px;';
+        shellBtn.onclick = function() {
+            var input = document.getElementById('screen_shell_input');
+            if (input.value.trim() === '') {
+                alert('Please enter a shell command!'); // Dịch
+                return;
+            }
+            // Display command in results
+            var resultText = document.getElementById('screen_shell_result');
+            if (resultText) {
+                resultText.value += '$ ' + input.value + '\n';
+                resultText.scrollTop = resultText.scrollHeight;
+            }
+            // Send shell command with type_id for specific handling
+            ws_send(JSON.stringify({ type: 'shell', type_id: 'screen_shell', shell: input.value }));
+            // Clear input after sending
+            input.value = '';
+        };
+        shellDiv.appendChild(shellBtn);
+
+        // Results textarea
+        var resultDiv = document.createElement("div");
+        resultDiv.style = 'margin-top: 10px;';
+
+        var resultText = document.createElement("textarea");
+        resultText.id = 'screen_shell_result';
+        resultText.readOnly = true;
+        resultText.style = 'width: 90%; height: 150px; padding: 5px; margin-top: 5px; background-color: rgba(0, 0, 0, 0.7); color: rgba(0, 160, 255, 1);';
+        resultText.placeholder = 'Shell command results will appear here...'; // Dịch
+        resultDiv.appendChild(resultText);
+
+        // Clear button for results
+        var clearBtn = document.createElement("input");
+        clearBtn.type = 'button';
+        clearBtn.className = 'btn';
+        clearBtn.value = 'Clear Results'; // Dịch
+        clearBtn.style = 'margin-top: 5px;';
+        clearBtn.onclick = function() {
+            var resultText = document.getElementById('screen_shell_result');
+            if (resultText) {
+                resultText.value = '';
+            }
+        };
+        resultDiv.appendChild(clearBtn);
+
+        shellDiv.appendChild(resultDiv);
+        screen_div.appendChild(shellDiv);
+
         divs.appendChild(screen_div); // Add screen page to main content
     }
     // --- End Build Screen Control Page UI ---
