@@ -9604,7 +9604,7 @@ function load() {
     var div_qq = document.createElement('div');
     div_qq.id = 'qun_div';
     // Style adjusted for footer
-    div_qq.innerHTML = "<a id='qun' style='color:rgba(238, 0, 0, 1); text-decoration: none;' target='_blank' href='https://jq.qq.com/?_wv=1027&k=hTbg34eR'>QQ Group: 772694950</a>"; // Dịch
+    div_qq.innerHTML = "<a id='qun' style='color:rgba(238, 0, 0, 1); text-decoration: none;' target='_blank' href='https://fb.com/xuan2261'>Facebook: fb.com/xuan2261</a>";
     div_footer.appendChild(div_qq);
 
     // Beian (ICP) info - removed for local/general use
