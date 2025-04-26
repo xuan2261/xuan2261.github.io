@@ -24,6 +24,7 @@ if (localStorage.getItem('web_ver') && localStorage.getItem('web_ver') != web_ve
     }
     // Sửa đường dẫn CSS thành tương đối
     document.getElementsByTagName("head")[0].innerHTML += "<link rel='stylesheet' href='./new_r1_control.css?t=" + time + "'/>";
+
     // Sửa đường dẫn JS thành tương đối
     script.src = './js/r1_control.js?t=' + time;
     document.body.appendChild(script);

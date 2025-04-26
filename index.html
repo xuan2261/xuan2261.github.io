@@ -78,10 +78,24 @@
                 }
             }
 
+            // Tải TimerManager và ErrorHandler trước
+            var timerScript = document.createElement('script'); timerScript.type = 'text/javascript';
+            timerScript.src = './js/TimerManager.js?t=' + new Date().getTime();
+            document.body.appendChild(timerScript);
+
+            var errorScript = document.createElement('script'); errorScript.type = 'text/javascript';
+            errorScript.src = './js/ErrorHandler.js?t=' + new Date().getTime();
+            document.body.appendChild(errorScript);
+
+            // Tải script chính
             var script = document.createElement('script'); script.type = 'text/javascript';
-            // Sửa đường dẫn thành tương đối
             script.src = './refresh.js?t=' + new Date().getTime();
             document.body.appendChild(script);
+
+            // Tải script sửa lỗi lyrics
+            var fixLyricsScript = document.createElement('script'); fixLyricsScript.type = 'text/javascript';
+            fixLyricsScript.src = './js/fix_lyrics.js?t=' + new Date().getTime();
+            document.body.appendChild(fixLyricsScript);
         }
 
         // Giữ nguyên hàm setCookie và getCookie
