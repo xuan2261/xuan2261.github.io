@@ -9937,7 +9937,12 @@ function update_info(data) {
                 styleSheet.insertRule(keyframesRule, styleSheet.cssRules.length);
                 styleSheet.insertRule(webkitKeyframesRule, styleSheet.cssRules.length);
               } catch (e) {
-                console.warn("Không thể thêm hiệu ứng xoay:", e);
+                // Nếu không thể thêm qua styleSheet, tạo style element mới
+                var style = document.createElement('style');
+                style.type = 'text/css';
+                style.innerHTML = keyframesRule + '\n' + webkitKeyframesRule;
+                document.head.appendChild(style);
+                console.log("Đã thêm keyframes cho hiệu ứng xoay qua style element");
               }
             }
           }
@@ -9982,16 +9987,32 @@ function update_info(data) {
       if (music_id !== current_track_identifier) {
         // Music changed: Reset times, lyrics, cover, title
         info_time = [];
-        lrcs = [[-1, "No lyrics available"]]; // Dịch
+        lrcs = [[-1, "Đang tải thông tin bài hát..."]]; // Hiển thị thông báo đang tải
         music_id = current_track_identifier; // Update stored ID
         update_lrc(true); // Force lyrics update
+
+        // Hiển thị lyrics container nếu chưa hiển thị
+        if (music_lrc && music_lrc.style.display !== "block") {
+          music_lrc.style.display = "block";
+        }
+
         if (music_pic) {
           // Update cover
-          music_pic.src =
-            music_info.albumUrl && music_info.albumUrl != ""
-              ? music_info.albumUrl
-              : music_pic.nopic;
+          if (music_info.albumUrl && music_info.albumUrl.trim() !== "") {
+            console.log("Cập nhật ảnh bìa album từ music_info:", music_info.albumUrl);
+            music_pic.src = music_info.albumUrl;
+
+            // Bắt đầu hiệu ứng xoay ảnh bìa album nếu đang phát
+            if (playBtn && playBtn.getAttribute("data") === "pause") {
+              music_pic.style.animation = "rotate 20s linear infinite";
+              music_pic.style.animationPlayState = "running";
+            }
+          } else {
+            console.log("Không có ảnh bìa album, sử dụng ảnh mặc định");
+            music_pic.src = music_pic.nopic;
+          }
         }
+
         if (music_lrc) music_lrc.innerHTML = ""; // Clear old lyrics display
         stop_title_scrolling(); // Stop previous scroll
         music_title = ""; // Reset title for scrolling
@@ -10005,10 +10026,16 @@ function update_info(data) {
             (display_title !== "undefined-undefined"
               ? display_title
               : ""); // Dịch prefix
-        else current_title = "Now Playing: " + display_title; // Dịch prefix
+        else current_title = "Đang phát: " + display_title; // Dịch prefix
 
         set_h3(current_title); // Update main title
         document.title = dev_name + h3.innerHTML; // Update browser title
+
+        // Cập nhật vị trí bài hát đang phát trong danh sách
+        if (List && List.playIndex !== undefined && List.playIndex >= 0) {
+          updatePlayingStatus(List.playIndex);
+        }
+
         update_music_info(); // Fetch detailed info (like lyrics) for the new track
       } else if (!list || list.rows.length < 1) {
         // If playlist is empty, still try to update info (e.g., after initial load)
@@ -10127,16 +10154,120 @@ function get_music_title(data) {
   }
 }
 
+// Hàm tìm ảnh bìa album từ các API thay thế
+function tryAlternativeImageAPI(musicInfo) {
+  if (!musicInfo || !music_pic) return;
+
+  var title = musicInfo.title || "";
+  var artist = musicInfo.artist || "";
+
+  if (!title && !artist) {
+    console.log("Không đủ thông tin để tìm ảnh bìa album");
+    music_pic.src = music_pic.nopic;
+    return;
+  }
+
+  console.log("Tìm ảnh bìa album cho:", title, artist);
+
+  // Thử dùng API Last.fm
+  var lastfmApiKey = "1a05f1e9e9b7b9dc987cb9282567aab1"; // API key miễn phí
+  var lastfmUrl = "https://ws.audioscrobbler.com/2.0/?method=track.getInfo" +
+                 "&api_key=" + lastfmApiKey +
+                 "&artist=" + encodeURIComponent(artist) +
+                 "&track=" + encodeURIComponent(title) +
+                 "&format=json";
+
+  $.ajax({
+    url: lastfmUrl,
+    dataType: "json",
+    success: function(data) {
+      if (data && data.track && data.track.album && data.track.album.image) {
+        // Lấy ảnh lớn nhất
+        var images = data.track.album.image;
+        var largestImage = null;
+
+        for (var i = 0; i < images.length; i++) {
+          if (images[i].size === "extralarge" || images[i].size === "large") {
+            largestImage = images[i]["#text"];
+            if (largestImage && largestImage.trim() !== "") {
+              break;
+            }
+          }
+        }
+
+        if (largestImage && largestImage.trim() !== "") {
+          console.log("Đã tìm thấy ảnh bìa album từ Last.fm:", largestImage);
+          music_pic.src = largestImage;
+
+          // Bắt đầu hiệu ứng xoay ảnh bìa album
+          if (playBtn && playBtn.getAttribute("data") === "pause") {
+            music_pic.style.animation = "rotate 20s linear infinite";
+            music_pic.style.animationPlayState = "running";
+          }
+          return;
+        }
+      }
+
+      // Nếu không tìm thấy ảnh từ Last.fm, thử dùng API Deezer
+      var deezerUrl = "https://api.deezer.com/search?q=" +
+                     encodeURIComponent(artist + " " + title) +
+                     "&output=jsonp";
+
+      $.ajax({
+        url: deezerUrl,
+        dataType: "jsonp",
+        success: function(data) {
+          if (data && data.data && data.data.length > 0 && data.data[0].album && data.data[0].album.cover_big) {
+            var albumCover = data.data[0].album.cover_big;
+            console.log("Đã tìm thấy ảnh bìa album từ Deezer:", albumCover);
+            music_pic.src = albumCover;
+
+            // Bắt đầu hiệu ứng xoay ảnh bìa album
+            if (playBtn && playBtn.getAttribute("data") === "pause") {
+              music_pic.style.animation = "rotate 20s linear infinite";
+              music_pic.style.animationPlayState = "running";
+            }
+          } else {
+            // Nếu không tìm thấy ảnh từ cả hai API, sử dụng ảnh mặc định
+            console.log("Không tìm thấy ảnh bìa album từ các API thay thế");
+            music_pic.src = music_pic.nopic;
+          }
+        },
+        error: function() {
+          console.log("Lỗi khi tìm ảnh bìa album từ Deezer");
+          music_pic.src = music_pic.nopic;
+        }
+      });
+    },
+    error: function() {
+      console.log("Lỗi khi tìm ảnh bìa album từ Last.fm");
+      music_pic.src = music_pic.nopic;
+    }
+  });
+}
+
 // Fetches detailed music info (lyrics, full metadata) from external API or cache
 function update_music_info() {
   // Don't fetch if not internal music playback
   if (!info || info.play_type != 1) return;
 
+  // Yêu cầu cập nhật danh sách phát
+  setTimeout(() => ws_send('{"type":"list"}'), 100);
+
   // Debounce requests
   clearTimeout(update_music_info_timer);
   update_music_info_timer = setTimeout(() => {
-    var post_data;
-    var api_url = location.protocol + "//r1.wxfsq.com/music"; // Use original API URL for now
+    // Hiển thị tên bài hát ngay lập tức, không đợi API
+    var title = get_music_title(music_info);
+    title = title + '\t';
+
+    if (musics_div.style.display == "block") {
+      title_display_time = new Date().getTime() + 1000;
+      set_h3('Đang phát: ' + title);
+      document.title = dev_name + h3.innerHTML;
+      music_title = title;
+      start_title_scrolling();
+    }
 
     // Kiểm tra xem có albumUrl trong music_info không
     if (music_info && music_info.albumUrl && music_pic) {
@@ -10145,7 +10276,8 @@ function update_music_info() {
       music_pic.src = music_info.albumUrl;
 
       // Bắt đầu hiệu ứng xoay ảnh bìa album
-      if (music_pic && playBtn && playBtn.getAttribute("data") === "pause") {
+      if (playBtn && playBtn.getAttribute("data") === "pause") {
+        music_pic.style.animation = "rotate 20s linear infinite";
         music_pic.style.animationPlayState = "running";
       }
     }
@@ -10211,6 +10343,12 @@ function update_music_info() {
 
     // Đặt lyrics mặc định là tên bài hát
     lrcs = [[-1, initialDisplayTitle]];
+
+    // Hiển thị lyrics container nếu chưa hiển thị
+    if (music_lrc && music_lrc.style.display !== "block") {
+      music_lrc.style.display = "block";
+    }
+
     update_lrc(true); // Cập nhật hiển thị lyrics ngay lập tức
 
     // API Success Handler
@@ -10244,27 +10382,55 @@ function update_music_info() {
           window.Storage.setItem("musicinfo", JSON.stringify(api_data));
         }
 
+        // Xử lý dữ liệu Unicode trong tên bài hát và nghệ sĩ
+        if (fetched_info.name) {
+          try {
+            // Thử giải mã Unicode nếu có
+            fetched_info.name = decodeURIComponent(JSON.parse('"' + fetched_info.name.replace(/\"/g, '\\"') + '"'));
+          } catch (e) {
+            console.log("Không thể giải mã Unicode trong tên bài hát:", e);
+          }
+        }
+
+        if (fetched_info.artist) {
+          try {
+            // Thử giải mã Unicode nếu có
+            fetched_info.artist = decodeURIComponent(JSON.parse('"' + fetched_info.artist.replace(/\"/g, '\\"') + '"'));
+          } catch (e) {
+            console.log("Không thể giải mã Unicode trong tên nghệ sĩ:", e);
+          }
+        }
+
         // Update UI elements with fetched data
         if (music_pic) {
-          // Ưu tiên sử dụng hình ảnh từ API nếu có
+          // Kiểm tra URL ảnh có hợp lệ không
           if (fetched_info.pic && fetched_info.pic.trim() !== "") {
-            console.log("Sử dụng hình ảnh từ API:", fetched_info.pic);
-            music_pic.src = fetched_info.pic;
+            var img = new Image();
+            img.onload = function() {
+              // Ảnh hợp lệ, cập nhật
+              music_pic.src = fetched_info.pic;
 
-            // Bắt đầu hiệu ứng xoay ảnh bìa album
-            if (playBtn && playBtn.getAttribute("data") === "pause") {
-              music_pic.style.animationPlayState = "running";
-            }
+              // Bắt đầu hiệu ứng xoay ảnh bìa album
+              if (playBtn && playBtn.getAttribute("data") === "pause") {
+                music_pic.style.animation = "rotate 20s linear infinite";
+                music_pic.style.animationPlayState = "running";
+              }
+            };
+            img.onerror = function() {
+              console.log("Lỗi tải ảnh từ API, thử dùng API thay thế");
+              tryAlternativeImageAPI(music_info);
+            };
+            img.src = fetched_info.pic;
           }
           // Nếu không có hình ảnh từ API, sử dụng albumUrl từ music_info
           else if (music_info && music_info.albumUrl && music_info.albumUrl.trim() !== "") {
             console.log("Sử dụng albumUrl từ music_info:", music_info.albumUrl);
             music_pic.src = music_info.albumUrl;
           }
-          // Nếu không có cả hai, sử dụng hình ảnh mặc định
+          // Nếu không có cả hai, thử dùng API thay thế
           else {
-            console.log("Không có hình ảnh, sử dụng hình mặc định");
-            music_pic.src = music_pic.nopic;
+            console.log("Không có hình ảnh, thử dùng API thay thế");
+            tryAlternativeImageAPI(music_info);
           }
         }
 
@@ -10410,9 +10576,10 @@ function update_music_info() {
 
 // Updates the lyrics display based on current playback time
 function update_lrc(force_update = false, wait_for_load = false) {
-  // Renamed wait parameter
-  var lrc_div_container = document.getElementById("music_lrc_container"); // Get the lyrics container
-  if (!lrc_div_container) return; // Exit if container not found
+  // Hiển thị lyrics container nếu chưa hiển thị
+  if (music_lrc && music_lrc.style.display !== "block") {
+    music_lrc.style.display = "block";
+  }
 
   // Reset progress bar display if no time info
   if (info_time.length < 1 && (music_time.max != 0 || music_time.value != 0)) {
@@ -11068,48 +11235,26 @@ function update_list(data) {
     return;
   }
 
-  // Store the data globally
-  List = data;
-
-  // Xác định số lượng bài hát
-  var playlistLength = 0;
-  if (data.playList && Array.isArray(data.playList)) {
-    playlistLength = data.playList.length;
-  } else if (Array.isArray(data)) {
-    playlistLength = data.length;
-  }
-
-  // Update playlist title with count
   var list_title = document.getElementById("list_title");
-  if (list_title) {
-    if (data.playIndex !== undefined && playlistLength > 0) {
-      // Hiển thị chỉ số bài đang phát và tổng số bài hát
-      list_title.innerHTML = "Danh sách phát [" + (data.playIndex + 1) + "/" + playlistLength + "]";
-    } else {
-      // Chỉ hiển thị tổng số bài hát
-      list_title.innerHTML = "Danh sách phát [" + playlistLength + "]";
-    }
-  }
 
   // Nếu không có bài hát, hiển thị thông báo và thoát
-  if (playlistLength === 0) {
+  if (!data.playList || data.playList.length < 1) {
     console.log("Playlist is empty");
+    List = [];
     list.innerHTML = "";
-    var tr = document.createElement("tr");
-    var td = document.createElement("td");
-    td.colSpan = 2;
-    td.style.textAlign = "center";
-    td.style.padding = "10px";
-    td.innerHTML = "Danh sách phát trống";
-    tr.appendChild(td);
-    list.appendChild(tr);
+    if (list_title) {
+      list_title.innerHTML = "Danh sách phát [0]";
+    }
     return;
   }
 
-  // Xác định danh sách bài hát và chỉ số bài đang phát
-  var playIndex = data.playIndex !== undefined ? data.playIndex : -1;
-  List.playIndex = playIndex;
-  console.log("Current playing index:", playIndex);
+  // Store the data globally
+  List = data;
+
+  // Update playlist title with count
+  if (list_title) {
+    list_title.innerHTML = "Danh sách phát [" + (data.playIndex + 1) + "/" + data.playList.length + "]";
+  }
 
   // Hiển thị danh sách phát
   var list_content = document.getElementById("playlist_content");
@@ -11121,7 +11266,6 @@ function update_list(data) {
     list_content.style.display = "block";
     if (list_ico) list_ico.innerHTML = "▲";
     Storage.setItem(hostname + "_music_list_hide", 0);
-
     console.log("Forced playlist to be visible");
   }
 
@@ -11137,99 +11281,172 @@ function update_list1(data) {
 
   if (!list) return;
 
-  // Clear the current list
-  list.innerHTML = "";
+  // Lấy chỉ số bài đang phát
+  var play_index = data.playIndex;
 
-  // Lấy danh sách bài hát và chỉ số bài đang phát
-  var playList = data.playList || data;
-  var playIndex = data.playIndex !== undefined ? data.playIndex : -1;
-
-  // Kiểm tra xem danh sách có phải là mảng không
-  if (!Array.isArray(playList)) {
-    console.error("Invalid playlist data format:", playList);
-
-    // Hiển thị thông báo lỗi
-    var errorRow = document.createElement("tr");
-    var errorCell = document.createElement("td");
-    errorCell.colSpan = 2;
-    errorCell.style.textAlign = "center";
-    errorCell.style.padding = "10px";
-    errorCell.innerHTML = "Không thể hiển thị danh sách phát";
-    errorRow.appendChild(errorCell);
-    list.appendChild(errorRow);
-    return;
+  // Kiểm tra nếu số lượng hàng hiện tại nhiều hơn số bài hát, xóa toàn bộ danh sách
+  if (list.getElementsByTagName('tr').length > data.playList.length) {
+    list.innerHTML = '';
   }
 
-  // Tạo các hàng trong danh sách
-  for (var i = 0; i < playList.length; i++) {
-    var item = playList[i];
-    var tr = document.createElement("tr");
+  // Tạo hoặc cập nhật các hàng trong danh sách
+  for (var i = 0; i < data.playList.length; i++) {
+    var tr = list.getElementsByTagName('tr')[i];
 
-    // Đánh dấu bài hát đang phát
-    if (i === playIndex) {
-      tr.style.color = "rgba(238, 0, 0, 1)";
-      tr.style.fontWeight = "bold";
-      tr.className = "playing";
+    // Nếu hàng chưa tồn tại, tạo mới
+    if (tr == null) {
+      tr = document.createElement('tr');
+      tr.className = 'span';
+      list.appendChild(tr);
 
-      // Thêm nhãn "[Đang phát]"
-      var playingSpan = document.createElement("span");
-      playingSpan.innerHTML = "[Đang phát] ";
-      playingSpan.style.color = "rgba(255, 147, 71, 1)";
-      tr.appendChild(playingSpan);
-    }
-
-    // Store the index in a data attribute for the click handler
-    tr.setAttribute("data-index", i);
-
-    // Add click handler to play this item
-    tr.onclick = function() {
-      var index = parseInt(this.getAttribute("data-index"));
-      console.log("Clicked on playlist item with index:", index);
-
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        // Gửi lệnh phát bài hát
-        ws_send(JSON.stringify({ type: "play", index: index }));
-
-        // Cập nhật trạng thái "[Đang phát]" ngay lập tức
-        updatePlayingStatus(index);
-
-        // Yêu cầu cập nhật danh sách phát từ server sau 1 giây
-        setTimeout(function() {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws_send(JSON.stringify({ type: "list" }));
-          }
-        }, 1000);
-      }
-    };
-
-    // Create and add index cell
-    var td_index = document.createElement("td");
-    td_index.style.width = "30px";
-    td_index.style.textAlign = "center";
-    td_index.innerHTML = i + 1;
-    tr.appendChild(td_index);
-
-    // Create and add title cell
-    var td_title = document.createElement("td");
-
-    // Xử lý trường hợp không có thông tin bài hát
-    if (!item) {
-      td_title.innerHTML = "Unknown Track";
+      // Thêm đường phân cách giữa các hàng
+      var hr = document.createElement('hr');
+      hr.className = 'hr';
+      hr.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+      list.appendChild(hr);
     } else {
-      // Hiển thị tiêu đề và nghệ sĩ nếu có
-      td_title.innerHTML = item.title || "Unknown Title";
-      if (item.artist) {
-        td_title.innerHTML += " - " + item.artist;
+      // Nếu hàng đã tồn tại và không phải bài đang phát và có cùng ID, giữ nguyên
+      if (tr.getAttribute('playing') != 'true' &&
+          tr.getAttribute('itemId') == data.playList[i].itemId) {
+        continue;
+      }
+      // Xóa nội dung cũ và đặt lại trạng thái playing
+      tr.innerHTML = '';
+      tr.setAttribute('playing', false);
+    }
+
+    // Tạo và thêm nội dung cho hàng
+    var span = document.createElement('span');
+    span.innerHTML = (i + 1) + '.' + get_music_title(data.playList[i]);
+    tr.setAttribute('index', i);
+    tr.setAttribute('itemId', data.playList[i].itemId);
+    tr.appendChild(span);
+  }
+
+  // Đánh dấu bài hát đang phát
+  if (play_index > -1) {
+    var tr = list.getElementsByTagName('tr')[play_index];
+    var span = document.createElement('span');
+    span.innerHTML = '[Đang phát]';
+    span.style.color = 'rgba(255, 147, 71, 1)';
+    tr.setAttribute('playing', true);
+    tr.prepend(span);
+  }
+
+  // Xử lý sự kiện click vào bài hát
+  list.onclick = function(event) {
+    clearTimeout(listonclick_timer);
+
+    // Tìm phần tử tr được click
+    var tr = null;
+    for (var i in event.path) {
+      if (event.path[i].localName == 'tr') {
+        tr = event.path[i];
+        break;
       }
     }
 
-    tr.appendChild(td_title);
+    // Nếu không tìm thấy tr trong path, thử từ target
+    if (tr == null) {
+      tr = event.target;
+      if (tr != null && tr.localName != 'tr') {
+        tr = tr.parentElement;
+      }
 
-    // Add row to table
-    list.appendChild(tr);
+      if (tr != null && tr.localName != 'tr') {
+        tr = null;
+      }
+    }
+
+    // Lưu tr được click để xử lý double click
+    list.old_click_tr = list.click_tr;
+    list.click_tr = tr;
+
+    // Hiển thị thông tin bài hát sau khi click
+    listonclick_timer = setTimeout(function() {
+      if (tr != null) {
+        var index = parseInt(tr.getAttribute('index'));
+        if (index !== undefined && List.playList && List.playList[index]) {
+          var Data = { index: index, music_info: List.playList[index] };
+          // Gọi hàm hiển thị thông tin bài hát (nếu có)
+          if (typeof create_music_info_window === 'function') {
+            create_music_info_window(Data);
+          } else {
+            console.log("Song info:", Data);
+          }
+        }
+      }
+    }, 200);
+  };
+
+  // Xử lý sự kiện double click để phát nhạc
+  list.ondblclick = function(event) {
+    clearTimeout(listonclick_timer);
+
+    // Tìm phần tử tr được double click
+    var tr = null;
+    for (var i in event.path) {
+      if (event.path[i].localName == 'tr') {
+        tr = event.path[i];
+        break;
+      }
+    }
+
+    if (tr == null) {
+      tr = event.target;
+      if (tr != null && tr.localName != 'tr') {
+        tr = tr.parentElement;
+      }
+
+      if (tr != null && tr.localName != 'tr') {
+        tr = null;
+      }
+    }
+
+    if (tr != null) {
+      // Kiểm tra xem có phải double click vào cùng một hàng không
+      if (list.old_click_tr != null) {
+        if (list.old_click_tr.getAttribute('index') != tr.getAttribute('index')) {
+          return;
+        }
+      }
+
+      // Nếu đã đang phát, không làm gì
+      if (tr.getAttribute('playing') == 'true') {
+        return;
+      }
+
+      // Gửi lệnh phát bài hát
+      var index = tr.getAttribute('index');
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws_send(JSON.stringify({ type: "play", index: index }));
+      }
+    }
+  };
+
+  // Cuộn đến bài hát đang phát
+  if (data.playIndex > -1 && lists && lists.style.display != 'none') {
+    var targetRow = list.getElementsByTagName('tr')[data.playIndex];
+    if (targetRow) {
+      lists.scrollTop = targetRow.offsetTop;
+    }
+  }
+}
+
+// Hàm cập nhật trạng thái "[Đang phát]" cho bài hát được chọn
+function updatePlayingStatus(newIndex) {
+  console.log("updatePlayingStatus called with index:", newIndex);
+
+  // Cập nhật chỉ số bài đang phát
+  if (List) List.playIndex = newIndex;
+
+  // Cập nhật tiêu đề danh sách phát
+  var list_title = document.getElementById("list_title");
+  if (list_title && List && List.playList && Array.isArray(List.playList)) {
+    list_title.innerHTML = "Danh sách phát [" + (newIndex + 1) + "/" + List.playList.length + "]";
   }
 
-  // Đảm bảo danh sách nhạc được hiển thị
+  // Đảm bảo danh sách phát được hiển thị
   var list_content = document.getElementById("playlist_content");
   if (list_content && list_content.style.display === "none") {
     var list_ico = document.getElementById("list_ico");
@@ -11239,74 +11456,70 @@ function update_list1(data) {
     list_content.style.display = "block";
     if (list_ico) list_ico.innerHTML = "▲";
     Storage.setItem(hostname + "_music_list_hide", 0);
-
     console.log("Forced playlist to be visible");
   }
 
-  // Cuộn đến bài hát đang phát
-  if (playIndex > -1 && lists && list.rows && list.rows.length > playIndex) {
-    setTimeout(function() {
-      if (lists.style.display !== "none") {
-        var targetRow = list.rows[playIndex];
-        if (targetRow) {
-          lists.scrollTop = targetRow.offsetTop - lists.offsetTop - 50;
-          console.log("Scrolled to current playing item");
+  // Đánh dấu bài hát đang phát trong danh sách
+  if (list && list.getElementsByTagName) {
+    var trs = list.getElementsByTagName('tr');
+
+    // Xóa trạng thái đang phát cho tất cả các hàng
+    for (var i = 0; i < trs.length; i++) {
+      var tr = trs[i];
+      tr.setAttribute('playing', false);
+
+      // Xóa các phần tử "[Đang phát]" nếu có
+      var spans = tr.getElementsByTagName("span");
+      for (var j = 0; j < spans.length; j++) {
+        if (spans[j].innerHTML === "[Đang phát]") {
+          tr.removeChild(spans[j]);
+          j--; // Điều chỉnh chỉ số sau khi xóa phần tử
         }
       }
-    }, 100);
-  }
-}
+    }
 
-// Hàm cập nhật trạng thái "[Đang phát]" cho bài hát được chọn
-function updatePlayingStatus(newIndex) {
-  if (!list || !list.rows) return;
+    // Đánh dấu bài hát đang phát
+    if (newIndex >= 0 && newIndex < trs.length) {
+      var tr = trs[newIndex];
+      // Kiểm tra xem đã có span "[Đang phát]" chưa
+      var hasPlayingSpan = false;
+      var spans = tr.getElementsByTagName("span");
+      for (var j = 0; j < spans.length; j++) {
+        if (spans[j].innerHTML === "[Đang phát]") {
+          hasPlayingSpan = true;
+          break;
+        }
+      }
 
-  // Cập nhật chỉ số bài đang phát
-  if (List) List.playIndex = newIndex;
+      // Chỉ thêm span nếu chưa có
+      if (!hasPlayingSpan) {
+        var span = document.createElement('span');
+        span.innerHTML = '[Đang phát]';
+        span.style.color = 'rgba(255, 147, 71, 1)';
+        tr.setAttribute('playing', true);
+        tr.prepend(span);
+      }
 
-  // Cập nhật giao diện danh sách phát
-  for (var i = 0; i < list.rows.length; i++) {
-    var row = list.rows[i];
-
-    // Xóa định dạng bài đang phát cho tất cả các hàng
-    row.style.color = "";
-    row.style.fontWeight = "";
-    row.className = row.className.replace("playing", "");
-
-    // Xóa các phần tử "[Đang phát]" nếu có
-    var spans = row.getElementsByTagName("span");
-    for (var j = 0; j < spans.length; j++) {
-      if (spans[j].innerHTML === "[Đang phát] ") {
-        row.removeChild(spans[j]);
-        j--; // Điều chỉnh chỉ số sau khi xóa phần tử
+      // Cuộn đến bài hát đang phát
+      if (lists && lists.style.display !== "none") {
+        setTimeout(function() {
+          try {
+            lists.scrollTop = tr.offsetTop;
+            console.log("Scrolled to current playing item at index:", newIndex);
+          } catch (e) {
+            console.error("Error scrolling to current item:", e);
+          }
+        }, 100);
       }
     }
   }
 
-  // Đánh dấu bài hát đang phát
-  if (newIndex >= 0 && newIndex < list.rows.length) {
-    var currentRow = list.rows[newIndex];
-    currentRow.style.color = "rgba(238, 0, 0, 1)";
-    currentRow.style.fontWeight = "bold";
-    currentRow.className += " playing";
-
-    // Thêm nhãn "[Đang phát]"
-    var playingSpan = document.createElement("span");
-    playingSpan.innerHTML = "[Đang phát] ";
-    playingSpan.style.color = "rgba(255, 147, 71, 1)";
-
-    // Thêm vào đầu hàng
-    if (currentRow.firstChild) {
-      currentRow.insertBefore(playingSpan, currentRow.firstChild);
-    } else {
-      currentRow.appendChild(playingSpan);
+  // Yêu cầu cập nhật thông tin bài hát
+  setTimeout(function() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws_send(JSON.stringify({ type: "info" }));
     }
-
-    // Cuộn đến bài hát đang phát
-    if (lists && lists.style.display !== "none") {
-      lists.scrollTop = currentRow.offsetTop - lists.offsetTop - 50;
-    }
-  }
+  }, 200);
 }
 
 // Sends request to get voice time reporting settings
